@@ -1,5 +1,6 @@
 import { Pixels, RGB, BAYER4, clamp, hash, hsv, mix, mul, ramp, scale } from './pixels';
 import type { SkyState } from './sky';
+import type { Season } from './season';
 
 export const W = 384;
 export const H = 108;
@@ -124,9 +125,95 @@ function litWindow(L: Light, x: number, y: number, seed: number, dayGlass: RGB):
   return mul(dayGlass, L.amb);
 }
 
+// ---------------------------------------------------------------- seasons
+
+/** Canopy pixel for deciduous trees: leafy, thinning, or bare twigs depending on the season. */
+function foliage(S: Season, x: number, y: number, edge: boolean): RGB | null {
+  if (hash(x, y, 300) < S.leafDensity) return edge ? mix(S.leaf, [255, 250, 200], 0.18) : S.leaf;
+  return hash(x, y, 301) < 0.55 ? (edge ? [126, 110, 92] : [88, 74, 62]) : null;
+}
+
+/** Falling leaves, snow, and summer fireflies, drawn over everything in one city's half. */
+function drawWeather(p: Pixels, ox: number, groundY: number, S: Season, L: Light) {
+  const t = L.t;
+  if (S.snowing) {
+    for (let i = 0; i < 90; i++) {
+      const speed = 4 + hash(i, ox, 1) * 5;
+      const y = (hash(i, ox, 2) * H + t * speed) % H;
+      const x = ox + ((hash(i, ox, 3) * HALF + Math.sin(t * 0.7 + i) * 3) % HALF);
+      p.blend(x, y, [250, 252, 255], hash(i, ox, 4) > 0.5 ? 0.95 : 0.6);
+    }
+  }
+  if (S.fallingLeaves) {
+    for (let i = 0; i < 14; i++) {
+      const speed = 3 + hash(i, ox, 5) * 3;
+      const y = 40 + ((hash(i, ox, 6) * 60 + t * speed) % (groundY - 40));
+      const x = ox + ((hash(i, ox, 7) * HALF + t * 4 + Math.sin(t * 1.6 + i) * 4) % HALF);
+      const c: RGB = ([[214, 128, 48], [200, 170, 60], [170, 84, 44]] as RGB[])[i % 3];
+      p.set(x, y, mul(c, L.amb));
+    }
+  }
+  if (S.fireflies && L.night > 0.3) {
+    for (let i = 0; i < 22; i++) {
+      const glow = Math.sin(t * (1.5 + hash(i, 8)) + i * 2);
+      if (glow < 0.3) continue;
+      const x = ox + hash(i, ox, 9) * HALF + Math.sin(t * 0.5 + i) * 3;
+      const y = groundY - 6 + hash(i, ox, 10) * 20 + Math.cos(t * 0.4 + i) * 2;
+      p.blend(x, y, [230, 255, 120], glow * L.night);
+    }
+  }
+}
+
+function drawWillow(p: Pixels, L: Light, S: Season, t: number) {
+  const lit = (c: RGB) => mul(c, L.amb);
+  const cx = 27;
+  const bark = lit([74, 56, 42]), barkHi = lit([112, 88, 62]);
+
+  // Clumps of hanging foliage, back to front: [centre x, top y, half-width, curtain bottom, depth shade]
+  const clumps: [number, number, number, number, number][] = [
+    [27, 43, 9, 64, 0.72], [14, 50, 8, 73, 0.8], [40, 49, 8, 72, 0.74],
+    [5, 57, 5, 79, 0.9], [49, 56, 5, 78, 0.82], [21, 55, 6, 77, 1], [34, 55, 6, 76, 0.94],
+  ];
+
+  // Trunk, roots and limbs reaching up into each clump (seen through the gaps, fully in winter)
+  p.rect(cx - 2, 62, 4, 20, bark);
+  p.rect(cx - 2, 62, 1, 20, barkHi);
+  p.rect(cx - 4, 81, 8, 1, bark);
+  p.rect(cx - 3, 80, 6, 1, bark);
+  for (const [x, y] of clumps) {
+    p.line(cx, 64, x, y + 2, bark);
+    p.line(cx + (x < cx ? -1 : 1), 65, x, y + 3, bark);
+  }
+
+  const leafy = S.willowLeafy;
+  const hi = mix(S.willow, [255, 252, 205], 0.35);
+  clumps.forEach(([ccx, top, w, bottom, depth], ci) => {
+    const leaf = scale(S.willow, depth), lo = scale(S.willow, depth * 0.62);
+    for (let x = ccx - w; x <= ccx + w; x++) {
+      const u = (x - ccx) / w;
+      if (hash(x, ci, 21) < (leafy > 0.2 ? 0.1 : 0.55)) continue; // gaps between strands
+      const y0 = top + Math.round(u * u * w * 0.55);
+      const len = Math.round(bottom - y0 - hash(x, ci, 22) * 5 - Math.abs(u) * 3);
+      const dark = hash(x, ci, 24) < 0.3;
+      const phase = t * 0.9 + x * 0.17 + ci;
+      for (let k = 0; k < len; k++) {
+        if (leafy < 0.2 && hash(x, k + ci * 50, 23) > 0.75) continue; // bare golden wands in winter
+        const f = k / len;
+        const sway = Math.sin(phase - k * 0.09) * f ** 1.5 * 2;
+        const splay = u * 2.5 * f;
+        let c: RGB = k < 2 && u < 0.5 ? hi : k > len - 3 ? lo : dark ? mix(leaf, lo, 0.6) : leaf;
+        if (u < -0.5 && k < len * 0.6) c = mix(c, hi, 0.35); // sunlit left edge
+        if (u > 0.4) c = mix(c, lo, 0.35);
+        if (S.snowing && k === 0) c = [240, 244, 250];
+        p.set(x + sway + splay, y0 + k, lit(c));
+      }
+    }
+  });
+}
+
 // ---------------------------------------------------------------- Cambridge
 
-function drawCambridge(p: Pixels, sky: SkyState, t: number) {
+function drawCambridge(p: Pixels, sky: SkyState, S: Season, t: number) {
   const L = lightFor(sky, t);
   const lit = (c: RGB) => mul(c, L.amb);
   p.clipX0 = 0;
@@ -136,7 +223,11 @@ function drawCambridge(p: Pixels, sky: SkyState, t: number) {
   // Distant trees along the Backs
   for (let x = 0; x < HALF; x++) {
     const top = Math.round(69 + 2.5 * Math.sin(x * 0.31) + 1.8 * Math.sin(x * 0.11 + 2) + Math.sin(x * 0.73));
-    for (let y = top; y < 81; y++) p.set(x, y, lit(y === top ? [60, 104, 58] : [40, 78, 44]));
+    for (let y = top; y < 81; y++) {
+      const c = y > 77 ? [44, 60, 44] as RGB : foliage(S, x, y, y === top);
+      if (c) p.set(x, y, lit(scale(c, y === top ? 0.9 : 0.7)));
+      else if (y > top + 3 && hash(x, y, 302) < 0.3) p.set(x, y, lit([70, 62, 56]));
+    }
   }
 
   // Gibbs Building (classical, to the right of the chapel)
@@ -203,26 +294,30 @@ function drawCambridge(p: Pixels, sky: SkyState, t: number) {
     p.rect(tx + 5, 17, 1, 3, lit(stoneLo));
   }
 
-  // Weeping willow, swaying
-  p.rect(24, 62, 4, 20, lit([84, 60, 40]));
-  p.rect(24, 62, 1, 20, lit([110, 82, 56]));
-  for (let x = 4; x < 50; x++) {
-    const d = x - 27;
-    const top = Math.round(50 + (d * d) / 38);
-    const bottom = Math.round(80 - Math.abs(d) / 2.5 - hash(x, 9) * 4);
-    const sway = Math.round(Math.sin(t * 0.9 + x * 0.18) * 0.9);
-    const gap = hash(x, 3) > 0.7;
-    for (let y = top; y < bottom; y++) {
-      if (gap && y > top + 7) continue;
-      const g: RGB = (x + y * 2) % 5 === 0 ? [140, 176, 74] : (x + y) % 3 === 0 ? [74, 122, 48] : [100, 150, 60];
-      p.set(x + (y > top + 6 ? sway : 0), y, lit(g));
-    }
+  drawWillow(p, L, S, t);
+
+  // Snow on the rooftops
+  if (S.snowing) {
+    const snow: RGB = lit([240, 244, 252]);
+    for (let x = 74; x < 148; x++) p.set(x, 37, snow);
+    for (let x = 158; x < 191; x++) p.set(x, 56, snow);
+    for (let j = 0; j < 6; j++) p.set(174 - j, 50 + j, snow), p.set(174 + j, 50 + j, snow);
+    for (const tx of [68, 148]) p.rect(tx + 1, 17, 4, 1, snow), p.rect(tx, 20, 6, 1, snow);
+    for (let k = 0; k < 7; k++) p.set(83 + 9 * k, 33, snow);
   }
 
   // Lawn with mowing stripes
   for (let x = 0; x < HALF; x++)
     for (let y = 80; y < 86; y++)
-      p.set(x, y, lit(y === 80 ? [58, 96, 46] : Math.floor((x + y) / 6) % 2 ? [94, 152, 70] : [80, 136, 62]));
+      p.set(x, y, lit(lawn(S, x, y)));
+
+  // Spring crocuses on the Backs
+  if (S.crocuses)
+    for (let x = 0; x < HALF; x++)
+      for (let y = 81; y < 86; y++) {
+        const r = hash(x, y, 310);
+        if (r < 0.1) p.set(x, y, lit(r < 0.05 ? [170, 110, 220] : r < 0.08 ? [250, 250, 240] : [250, 210, 70]));
+      }
 
   // River Cam: wobbling reflection of everything above it
   const waterY = 86;
@@ -260,6 +355,14 @@ function drawCambridge(p: Pixels, sky: SkyState, t: number) {
     p.disc(px + 19, 95, 3, WARM, 0.25 * L.night);
     p.set(px + 19, 95, WARM);
   }
+
+  drawWeather(p, 0, 86, S, L);
+}
+
+function lawn(S: Season, x: number, y: number): RGB {
+  if (S.snowing) return y === 80 ? [196, 204, 216] : hash(x, y, 311) < 0.15 ? [214, 222, 234] : [236, 240, 248];
+  if (y === 80) return scale(S.grass, 0.62);
+  return Math.floor((x + y) / 6) % 2 ? S.grass : scale(S.grass, 0.88);
 }
 
 // ---------------------------------------------------------------- Dallas
@@ -277,7 +380,7 @@ function tower(
   }
 }
 
-function drawDallas(p: Pixels, sky: SkyState, t: number) {
+function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number) {
   const L = lightFor(sky, t);
   const lit = (c: RGB) => mul(c, L.amb);
   const ox = HALF;
@@ -408,7 +511,10 @@ function drawDallas(p: Pixels, sky: SkyState, t: number) {
   // Trees along the Trinity levee
   for (let x = ox; x < W; x++) {
     const top = Math.round(87 + Math.sin(x * 0.5) + Math.sin(x * 0.21));
-    for (let y = top; y < 93; y++) p.set(x, y, lit(y === top ? [64, 104, 56] : [44, 80, 46]));
+    for (let y = top; y < 93; y++) {
+      const c = y > 90 ? [44, 64, 44] as RGB : foliage(S, x, y, y === top) ?? [66, 70, 56];
+      p.set(x, y, lit(scale(c, y === top ? 0.95 : 0.72)));
+    }
   }
 
   // Margaret Hunt Hill Bridge
@@ -427,16 +533,24 @@ function drawDallas(p: Pixels, sky: SkyState, t: number) {
   p.rect(ox + 126, 93, 66, 1, lit([120, 120, 116]));
 
   // Grass, highway with traffic, and the Trinity River
-  p.rect(ox, 93, HALF, 2, lit([82, 128, 64]));
+  const grass = (x: number, y: number): RGB =>
+    S.snowing ? (hash(x, y, 320) < 0.3 ? [150, 160, 120] : [236, 240, 248]) : (x + y) % 7 === 0 ? scale(S.grass, 1.15) : S.grass;
+  for (let x = ox; x < W; x++) for (let y = 93; y < 95; y++) p.set(x, y, lit(grass(x, y)));
   p.rect(ox, 95, HALF, 4, lit([62, 62, 68]));
   for (let x = ox; x < W; x += 6) p.rect(x, 97, 3, 1, lit([200, 190, 120]));
-  p.rect(ox, 99, HALF, 2, lit([82, 128, 64]));
+  for (let x = ox; x < W; x++) for (let y = 99; y < 101; y++) p.set(x, y, lit(grass(x, y)));
   const river = mix(L.horizon, [40, 78, 90], 0.5);
   for (let y = 101; y < 105; y++)
     for (let x = ox; x < W; x++)
       p.set(x, y, hash(x, y, Math.floor(t * 3)) < 0.03 ? mix(river, [255, 255, 255], 0.3) : river);
   for (let y = 105; y < H; y++)
-    for (let x = ox; x < W; x++) p.set(x, y, lit((x + y) % 7 === 0 ? [92, 138, 70] : [76, 120, 58]));
+    for (let x = ox; x < W; x++) p.set(x, y, lit(scale(grass(x, y), 0.92)));
+  if (S.bluebonnets)
+    for (let x = ox; x < W; x++)
+      for (const y of [93, 94, 105, 106, 107]) {
+        const r = hash(x, y, 330);
+        if (r < 0.22) p.set(x, y, lit(r < 0.18 ? [70, 90, 200] : [240, 240, 250]));
+      }
 
   const paints = [[220, 60, 60], [240, 240, 240], [60, 100, 200], [30, 30, 36], [200, 180, 60]] as RGB[];
   for (let lane = 0; lane < 2; lane++) {
@@ -456,15 +570,19 @@ function drawDallas(p: Pixels, sky: SkyState, t: number) {
       }
     }
   }
+
+  drawWeather(p, ox, 92, S, L);
 }
 
 // ---------------------------------------------------------------- frame
 
 const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
 
-export function render(p: Pixels, cambridge: SkyState, dallas: SkyState, t: number) {
-  drawCambridge(p, cambridge, t);
-  drawDallas(p, dallas, t);
+export function render(
+  p: Pixels, cambridge: SkyState, dallas: SkyState, cSeason: Season, dSeason: Season, t: number,
+) {
+  drawCambridge(p, cambridge, cSeason, t);
+  drawDallas(p, dallas, dSeason, t);
 
   p.clipX0 = 0;
   p.clipX1 = W;

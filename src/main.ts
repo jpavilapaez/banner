@@ -3,6 +3,7 @@ import { left, right, type Place } from './config';
 import { Pixels } from './pixels';
 import { H, W, render } from './scene';
 import { skyState } from './sky';
+import { seasonFor } from './season';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 canvas.width = W;
@@ -12,7 +13,10 @@ const pixels = new Pixels(W, H);
 const image = new ImageData(pixels.data, W, H);
 
 // ?at=2026-11-15T21:30:00Z freezes the clock (handy for previewing night/day).
-const frozen = new URLSearchParams(location.search).get('at');
+// ?season=winter|spring|summer|autumn forces a season.
+const query = new URLSearchParams(location.search);
+const frozen = query.get('at');
+const seasonOverride = query.get('season');
 const now = () => (frozen ? new Date(frozen) : new Date());
 
 function parts(date: Date, place: Place) {
@@ -60,13 +64,13 @@ function setHtml(el: HTMLElement, html: string) {
   }
 }
 
-function updateClock(el: HTMLElement, place: Place, date: Date) {
+function updateClock(el: HTMLElement, place: Place, date: Date, season: string) {
   const p = parts(date, place);
   setHtml(
     el,
     `<div class="label">${escape(place.city)} · ${escape(place.person)}</div>` +
       `<div class="time">${p.hm}<small>${p.sec}</small></div>` +
-      `<div class="date">${p.date}</div>` +
+      `<div class="date">${p.date} · ${season.toUpperCase()}</div>` +
       `<div class="mood">${mood(p.hour24)}</div>`,
   );
 }
@@ -83,11 +87,13 @@ function frame(ms: number) {
   last = ms;
   const date = now();
   const t = (ms - start) / 1000 + (date.getTime() / 1000) % 10000;
-  render(pixels, skyState(date, left.lat, left.lon), skyState(date, right.lat, right.lon), t);
+  const cs = seasonFor(date, 'cambridge', left.timeZone, seasonOverride);
+  const ds = seasonFor(date, 'dallas', right.timeZone, seasonOverride);
+  render(pixels, skyState(date, left.lat, left.lon), skyState(date, right.lat, right.lon), cs, ds, t);
   ctx.putImageData(image, 0, 0);
 
-  updateClock(leftEl, left, date);
-  updateClock(rightEl, right, date);
+  updateClock(leftEl, left, date, cs.name);
+  updateClock(rightEl, right, date, ds.name);
   const diff = Math.abs(offsetMinutes(date, left.timeZone) - offsetMinutes(date, right.timeZone)) / 60;
   setHtml(apartEl, `${diff}h apart`);
 }

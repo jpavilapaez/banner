@@ -11,7 +11,7 @@ export interface Place {
 const params = new URLSearchParams(location.search);
 
 export const left: Place = {
-  person: params.get('me') ?? 'Me',
+  person: params.get('me') ?? 'Juan',
   city: 'Cambridge',
   timeZone: 'Europe/London',
   lat: 52.2053,
@@ -20,7 +20,7 @@ export const left: Place = {
 };
 
 export const right: Place = {
-  person: params.get('her') ?? 'Her',
+  person: params.get('her') ?? 'Julie',
   city: 'Plano',
   timeZone: 'America/Chicago',
   lat: 33.0198,
