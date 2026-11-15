@@ -1,0 +1,56 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #0d0b16;
+  overflow: hidden;
+}
+body {
+  display: grid;
+  place-items: center;
+}
+#banner {
+  position: relative;
+  /* Fill the width, but never overflow the height of the Notion embed. */
+  width: min(100vw, calc(100vh * 384 / 108));
+  aspect-ratio: 384 / 108;
+  container-type: inline-size;
+}
+#scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.clock {
+  position: absolute;
+  top: 2.8%;
+  padding: 0.5cqw 0.9cqw 0.6cqw;
+  background: rgb(12 10 24 / 0.62);
+  color: #fdf3d8;
+  box-shadow:
+    0 -0.26cqw 0 0 #fdf3d8, 0 0.26cqw 0 0 #fdf3d8,
+    -0.26cqw 0 0 0 #fdf3d8, 0.26cqw 0 0 0 #fdf3d8;
+  font-family: 'Silkscreen', monospace;
+  line-height: 1;
+  white-space: nowrap;
+}
+.clock.left { left: 1.3%; }
+.clock.right { right: 1.3%; text-align: right; }
+.clock .label { font-size: 1.25cqw; letter-spacing: 0.05em; color: #ffd27a; }
+.clock .time { font-family: 'VT323', monospace; font-size: 5.2cqw; margin: 0.15cqw 0 0; }
+.clock .time small { font-size: 2.6cqw; opacity: 0.75; margin-left: 0.3cqw; }
+.clock .date { font-size: 1.05cqw; opacity: 0.85; }
+.clock .mood { font-size: 1.05cqw; color: #9fd8ff; margin-top: 0.35cqw; }
+.apart {
+  position: absolute;
+  left: 50%;
+  top: 10.5%;
+  transform: translateX(-50%);
+  font-family: 'Silkscreen', monospace;
+  font-size: 1.05cqw;
+  color: #ffe1ea;
+  background: #120c1e;
+  padding: 0.35cqw 0.6cqw;
+  white-space: nowrap;
+}
