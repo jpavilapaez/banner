@@ -13,7 +13,7 @@ const pixels = new Pixels(W, H);
 const image = new ImageData(pixels.data, W, H);
 
 // ?at=2026-11-15T21:30:00Z freezes the clock (handy for previewing night/day).
-// ?season=winter|spring|summer|autumn forces a season.
+// ?season=winter|spring|summer|autumn forces a season. ?fireworks=1 previews the fireworks.
 const query = new URLSearchParams(location.search);
 const frozen = query.get('at');
 const seasonOverride = query.get('season');
@@ -83,12 +83,13 @@ let last = 0;
 
 function frame(ms: number) {
   requestAnimationFrame(frame);
-  if (ms - last < 110) return; // ~9 fps is plenty for pixel art
+  if (ms - last < 66) return; // ~15 fps is plenty for pixel art
   last = ms;
   const date = now();
   const t = (ms - start) / 1000 + (date.getTime() / 1000) % 10000;
   const cs = seasonFor(date, 'cambridge', left.timeZone, seasonOverride);
   const ds = seasonFor(date, 'dallas', right.timeZone, seasonOverride);
+  if (query.has('fireworks')) cs.fireworks = ds.fireworks = true;
   render(pixels, skyState(date, left.lat, left.lon), skyState(date, right.lat, right.lon), cs, ds, t);
   ctx.putImageData(image, 0, 0);
 

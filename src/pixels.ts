@@ -75,6 +75,24 @@ export class Pixels {
     this.set(x, y, a >= 1 ? c : mix(this.get(x, y), c, a));
   }
 
+  /** Additive blend, for light sources. */
+  add(x: number, y: number, c: RGB, a: number): void {
+    if (a <= 0) return;
+    const g = this.get(x, y);
+    this.set(x, y, [g[0] + c[0] * a, g[1] + c[1] * a, g[2] + c[2] * a]);
+  }
+
+  /** Soft additive halo with quadratic falloff. */
+  glow(cx: number, cy: number, r: number, c: RGB, a: number): void {
+    if (a <= 0.01) return;
+    cx = Math.round(cx); cy = Math.round(cy);
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        const f = 1 - Math.sqrt(dx * dx + dy * dy) / r;
+        if (f > 0) this.add(cx + dx, cy + dy, c, a * f * f);
+      }
+  }
+
   rect(x: number, y: number, w: number, h: number, c: RGB): void {
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.set(x + i, y + j, c);
   }

@@ -16,6 +16,10 @@ export interface Season {
   crocuses: boolean;
   bluebonnets: boolean;
   fireflies: boolean;
+  /** Bonfire Night in Cambridge, the Fourth of July in Dallas, New Year in both. */
+  fireworks: boolean;
+  /** Misty mornings are thicker in the cold half of the year. */
+  mist: number;
 }
 
 const BARE: RGB = [104, 88, 72];
@@ -47,18 +51,19 @@ const GRASS: Record<City, [number, RGB][]> = {
 
 const OVERRIDE_DOY: Record<string, number> = { winter: 20, spring: 105, summer: 195, autumn: 300 };
 
-function localDayOfYear(date: Date, timeZone: string): { doy: number; year: number } {
+function localDayOfYear(date: Date, timeZone: string): { doy: number; year: number; month: number; day: number } {
   const p = Object.fromEntries(
     new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' })
       .formatToParts(date)
       .map((x) => [x.type, Number(x.value)]),
   );
   const doy = (Date.UTC(p.year, p.month - 1, p.day) - Date.UTC(p.year, 0, 1)) / 86400000 + 1;
-  return { doy, year: p.year };
+  return { doy, year: p.year, month: p.month, day: p.day };
 }
 
 export function seasonFor(date: Date, city: City, timeZone: string, override?: string | null): Season {
-  let { doy, year } = localDayOfYear(date, timeZone);
+  let { doy, year, month, day } = localDayOfYear(date, timeZone);
+  const on = (m: number, d: number) => !override && month === m && day === d;
   if (override && override in OVERRIDE_DOY) doy = OVERRIDE_DOY[override];
   const name =
     doy < 80 || doy >= 355 ? 'winter' : doy < 172 ? 'spring' : doy < 266 ? 'summer' : 'autumn';
@@ -78,5 +83,7 @@ export function seasonFor(date: Date, city: City, timeZone: string, override?: s
     crocuses: city === 'cambridge' && doy >= 45 && doy < 105,
     bluebonnets: city === 'dallas' && doy >= 75 && doy < 130,
     fireflies: city === 'dallas' && doy >= 140 && doy < 240,
+    fireworks: on(12, 31) || on(1, 1) || (city === 'cambridge' ? on(11, 5) : on(7, 4)),
+    mist: doy < 90 || doy > 270 ? 1 : 0.55,
   };
 }
