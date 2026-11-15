@@ -24,7 +24,7 @@ body {
 }
 .clock {
   position: absolute;
-  top: 2.8%;
+  top: 0.8cqw;
   padding: 0.5cqw 0.9cqw 0.6cqw;
   background: rgb(12 10 24 / 0.62);
   color: #fdf3d8;
