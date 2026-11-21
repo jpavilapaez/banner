@@ -31,7 +31,7 @@ const pixels = new Pixels(W, H);
 const image = new ImageData(pixels.data, W, H);
 
 // ?at=2026-11-15T21:30:00Z freezes the clock (handy for previewing night/day).
-// ?season=winter|spring|summer|autumn forces a season. ?fireworks=1 previews the fireworks.
+// ?season=winter|spring|summer|autumn forces a season. ?fireworks=1 / ?christmas=1 preview those.
 const query = new URLSearchParams(location.search);
 const frozen = query.get('at');
 const seasonOverride = query.get('season');
@@ -51,6 +51,7 @@ function parts(date: Date, place: Place) {
     hm: `${place.hour12 ? Number(t.hour) : t.hour}:${t.minute}`,
     sec: `:${t.second}${place.hour12 ? ' ' + (t.dayPeriod ?? '').toUpperCase() : ''}`,
     date: `${d.weekday} ${d.day} ${d.month}`.toUpperCase(),
+    christmasDay: d.day === '25' && d.month === 'Dec',
   };
 }
 
@@ -89,7 +90,7 @@ function updateClock(el: HTMLElement, place: Place, date: Date, season: string) 
     `<div class="label">${escape(place.city)} · ${escape(place.person)}</div>` +
       `<div class="time">${p.hm}<small>${p.sec}</small></div>` +
       `<div class="date">${p.date} · ${season.toUpperCase()}</div>` +
-      `<div class="mood">${mood(p.hour24)}</div>`,
+      `<div class="mood">${p.christmasDay && p.hour24 >= 6 ? 'merry christmas!' : mood(p.hour24)}</div>`,
   );
 }
 
@@ -108,13 +109,15 @@ function frame(ms: number) {
   const cs = seasonFor(date, 'cambridge', left.timeZone, seasonOverride);
   const ds = seasonFor(date, 'dallas', right.timeZone, seasonOverride);
   if (query.has('fireworks')) cs.fireworks = ds.fireworks = true;
-  render(pixels, skyState(date, left.lat, left.lon), skyState(date, right.lat, right.lon), cs, ds, t);
+  if (query.has('christmas')) cs.christmas = ds.christmas = true;
+  const tops = render(pixels, skyState(date, left.lat, left.lon), skyState(date, right.lat, right.lon), cs, ds, t);
   ctx.putImageData(image, 0, extra);
   if (extra > 0) {
-    // Continue each city's sky upwards, with a few stars after dark.
-    [[0, 2, left], [W / 2, W - 3, right]].forEach(([x0, sample, place], side) => {
-      const i = (sample as number) * 4;
-      ctx.fillStyle = `rgb(${pixels.data[i]},${pixels.data[i + 1]},${pixels.data[i + 2]})`;
+    // Continue each city's sky upwards, with a few stars after dark. The colour comes from the
+    // sky gradient itself, not a sampled pixel, so a star or cloud on the top row can't flash it.
+    [[0, tops[0], left], [W / 2, tops[1], right]].forEach(([x0, top, place], side) => {
+      const [r, g, b] = (top as readonly number[]).map(Math.round);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
       ctx.fillRect(x0 as number, 0, W / 2, extra);
       const pl = place as Place;
       const night = Math.max(0, Math.min(1, (-skyState(date, pl.lat, pl.lon).elevation - 2) / 8));

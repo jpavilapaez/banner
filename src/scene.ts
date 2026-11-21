@@ -304,6 +304,88 @@ function drawFireworks(p: Pixels, ox: number, L: Light) {
   }
 }
 
+// ---------------------------------------------------------------- Christmas
+
+const BULBS: RGB[] = [[255, 70, 60], [255, 210, 90], [80, 220, 120], [90, 150, 255]];
+
+/** A string of fairy lights hanging between two points; the bulbs twinkle after dark. */
+function fairyLights(p: Pixels, L: Light, x0: number, y0: number, x1: number, y1: number, sag: number, seed: number) {
+  const n = Math.max(2, Math.round(Math.abs(x1 - x0)));
+  const wire = mul([40, 44, 40], L.amb);
+  for (let k = 0; k <= n; k++) {
+    const u = k / n, x = lerp(x0, x1, u), y = lerp(y0, y1, u) + sag * 4 * u * (1 - u);
+    if (k % 3 !== 1) { p.blend(x, y, wire, 0.6); continue; }
+    const c = BULBS[(Math.floor(k / 3) + seed) % BULBS.length];
+    const on = Math.sin(L.t * 1.8 + k * 1.3 + seed) > -0.4;
+    if (L.night > 0.1 && on) {
+      p.set(x, y, c);
+      p.glow(x, y, 2, c, 0.35 * L.night);
+    } else p.set(x, y, mul(scale(c, 0.6), L.amb));
+  }
+}
+
+/** A decorated fir: three tiers, baubles by day, twinkling lights at night, and a star on top. */
+function xmasTree(p: Pixels, L: Light, S: Season, cx: number, base: number, h: number, seed: number) {
+  const lit = (c: RGB) => mul(c, L.amb);
+  p.rect(cx - (h > 12 ? 1 : 0), base - 2, h > 12 ? 2 : 1, 2, lit([86, 60, 40]));
+  const top = base - 2 - h, tier = h / 3;
+  const width = (j: number) => Math.round(0.5 + Math.floor(j / tier) * 1.4 + (j % tier) * 0.9);
+  for (let j = 0; j < h; j++)
+    for (let dx = -width(j); dx <= width(j); dx++) {
+      const x = cx + dx, y = top + j;
+      let c = scale([40, 108, 62], (dx < 0 ? 1.1 : 0.82) * (hash(x, y, seed) < 0.2 ? 0.85 : 1));
+      if (S.snowing && j % tier < 1 && hash(x, y, seed + 1) < 0.7) c = [236, 240, 248];
+      p.set(x, y, lit(c));
+    }
+  for (let i = 0; i < h * 1.4; i++) {
+    const j = 2 + Math.floor(hash(i, seed, 1) * (h - 2)), w = width(j);
+    const x = cx + Math.round((hash(i, seed, 2) * 2 - 1) * (w - 0.5)), y = top + j;
+    const c = BULBS[i % BULBS.length];
+    if (L.night > 0.1) {
+      const tw = 0.5 + 0.5 * Math.sin(L.t * 2.2 + i * 2.1);
+      p.set(x, y, mix(lit(c), c, L.night * (0.4 + 0.6 * tw)));
+      p.glow(x, y, 2, c, 0.25 * L.night * tw);
+    } else p.set(x, y, lit(c));
+  }
+  const star: RGB = [255, 222, 90];
+  const sc = L.night > 0.1 ? star : lit(star);
+  p.set(cx, top - 1, sc); p.set(cx - 1, top - 1, sc); p.set(cx + 1, top - 1, sc); p.set(cx, top - 2, sc);
+  if (L.night > 0.1) p.glow(cx, top - 1, 6, [255, 210, 120], (0.3 + 0.15 * Math.sin(L.t * 2)) * L.night);
+}
+
+/** Santa and three reindeer cross the whole banner now and then after dark. */
+function drawSanta(p: Pixels, L: Light) {
+  if (L.night < 0.3) return;
+  const period = 70, ph = (L.t % period) / 26;
+  if (ph >= 1) return;
+  const sx = Math.round(-50 + ph * (W + 90)), sy = Math.round(30 + Math.sin(ph * 9) * 4);
+  // moonlit, so lighter than a silhouette
+  const k = (c: RGB): RGB => mix(mul(c, L.amb), c, 0.55);
+  for (let i = 1; i < 14; i++) p.blend(sx - i, sy + 2 + Math.round(Math.sin(i * 0.8 + L.t * 3)), [255, 230, 150], 0.5 * (1 - i / 14) * (Math.sin(i * 2.7 + L.t * 9) > 0 ? 1 : 0.3)); // sparkle trail
+  const red = k([200, 30, 36]), gold = k([230, 190, 80]), brown = k([120, 80, 50]);
+  p.rect(sx, sy - 2, 7, 3, red); // sleigh
+  p.rect(sx, sy - 4, 2, 2, red);
+  p.rect(sx - 1, sy + 2, 9, 1, gold); // runner
+  p.set(sx + 8, sy + 1, gold);
+  p.rect(sx, sy - 2, 7, 1, gold);
+  p.rect(sx + 1, sy - 5, 2, 2, brown); // sack
+  p.rect(sx + 3, sy - 4, 2, 2, red); // Santa
+  p.set(sx + 4, sy - 5, k([236, 190, 150]));
+  p.set(sx + 4, sy - 4, k([250, 250, 250])); // beard
+  p.rect(sx + 3, sy - 6, 2, 1, red);
+  p.set(sx + 2, sy - 6, k([250, 250, 250]));
+  p.line(sx + 6, sy - 3, sx + 28, sy - 4, gold, 0.6); // reins
+  for (let i = 0; i < 3; i++) {
+    const rx = sx + 12 + i * 7, ry = sy - 3 + Math.round(Math.sin(L.t * 6 + i) * 0.6);
+    const gallop = Math.sin(L.t * 8 + i * 1.5) > 0 ? 1 : 0;
+    p.rect(rx, ry, 4, 2, brown);
+    p.set(rx + 4, ry - 1, brown); p.set(rx + 5, ry - 1, brown); // head
+    p.set(rx + 4, ry - 2, k([180, 150, 110])); p.set(rx + 3, ry - 3, k([180, 150, 110])); p.set(rx + 5, ry - 3, k([180, 150, 110])); // antlers
+    p.set(rx + gallop, ry + 2, brown); p.set(rx + 3 - gallop, ry + 2, brown); // legs
+    if (i === 2) { p.set(rx + 6, ry - 1, [255, 60, 50]); p.glow(rx + 6, ry - 1, 3, [255, 40, 40], 0.6); } // Rudolph
+  }
+}
+
 function lamp(p: Pixels, L: Light, x: number, base: number, h: number) {
   const iron = mul([36, 38, 46], L.amb);
   p.rect(x, base - h, 1, h, iron);
@@ -370,7 +452,7 @@ const COW_UP = ['.bbbbb.hh', 'bbwbbbbhh', 'bbbbwbb..', 'b.b..b.b.'];
 const COW_GRAZE = ['.bbbbb...', 'bbwbbbb..', 'bbbbwbbhh', 'b.b..b.bh'];
 const SWAN = ['.w....', 'ow....', '.w.www', '.wwwww'];
 
-function drawCambridge(p: Pixels, sky: SkyState, S: Season, t: number) {
+function drawCambridge(p: Pixels, sky: SkyState, S: Season, t: number): RGB {
   const L = lightFor(sky, t, 0, 86);
   const lit = (c: RGB) => mul(c, L.amb);
   p.clipX0 = 0;
@@ -507,6 +589,14 @@ function drawCambridge(p: Pixels, sky: SkyState, S: Season, t: number) {
     for (let k = 0; k < 7; k++) p.set(83 + 9 * k, 33, snow), p.rect(82 + 9 * k, 72, 4, 1, snow);
   }
 
+  if (S.christmas) {
+    const posts = [74, ...Array.from({ length: 7 }, (_, k) => 83 + 9 * k), 148];
+    for (let k = 0; k + 1 < posts.length; k++) fairyLights(p, L, posts[k], 43, posts[k + 1], 43, 2, k);
+    const holly = lit([40, 110, 60]);
+    for (const [dx, dy] of [[0, 0], [1, -1], [2, 0], [-1, 1], [3, 1], [-1, 2], [3, 2], [0, 3], [2, 3], [1, 3]]) p.set(173 + dx, 69 + dy, holly);
+    p.set(174, 72, lit([220, 40, 40])); // wreath bow
+  }
+
   // Lawn with mowing stripes, and light spilling from the windows after dark
   for (let x = 0; x < HALF; x++)
     for (let y = 80; y < 86; y++)
@@ -520,6 +610,8 @@ function drawCambridge(p: Pixels, sky: SkyState, S: Season, t: number) {
         const r = hash(x, y, 310);
         if (r < 0.1) p.set(x, y, lit(r < 0.05 ? [170, 110, 220] : r < 0.08 ? [250, 250, 240] : [250, 210, 70]));
       }
+
+  if (S.christmas) xmasTree(p, L, S, 116, 86, 15, 1);
 
   // Cattle grazing on the Backs (they stay in when it snows)
   if (!S.snowing)
@@ -612,7 +704,9 @@ function drawCambridge(p: Pixels, sky: SkyState, S: Season, t: number) {
     if (i % 5 === 0) p.rect(Math.round(x + lean), Math.round(H - 2 - h), 1, 3, lit([84, 56, 38])); // cattail
   }
 
+  if (S.christmas) drawSanta(p, L);
   drawWeather(p, 0, 86, S, L);
+  return L.top;
 }
 
 function lawn(S: Season, x: number, y: number): RGB {
@@ -654,6 +748,18 @@ function tower(
   p.rect(x, top, w, 1, mul(scale(color, 1.2), L.amb));
 }
 
+/** Reunion Tower's holiday show: a lit tree, red and green rings, then sparkle. */
+function xmasLed(show: number, dx: number, dy: number, t: number): RGB {
+  if (show === 0) {
+    if (dy === -6 && dx === 0) return [255, 220, 90];
+    if (dy > -6 && dy < 6 && Math.abs(dx) <= (dy + 6) / 2.2) return hash(dx, dy, Math.floor(t * 2)) < 0.2 ? [255, 220, 90] : [60, 220, 90];
+    return [200, 30, 40];
+  }
+  if (show === 1) return Math.floor(Math.hypot(dx, dy) / 2 - t * 3) & 1 ? [220, 30, 40] : [50, 210, 90];
+  const r = hash(dx, dy, Math.floor(t * 5));
+  return r < 0.35 ? WHITE : r < 0.7 ? [220, 30, 40] : [40, 180, 80];
+}
+
 /** Red aircraft-warning light. */
 function beacon(p: Pixels, L: Light, x: number, y: number, phase: number) {
   const on = (L.t * 0.7 + phase) % 1 < 0.5;
@@ -663,7 +769,7 @@ function beacon(p: Pixels, L: Light, x: number, y: number, phase: number) {
   } else p.set(x, y, mul([150, 40, 40], L.amb));
 }
 
-function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number) {
+function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number): RGB {
   const L = lightFor(sky, t, HALF, 90);
   const lit = (c: RGB) => mul(c, L.amb);
   const ox = HALF;
@@ -749,7 +855,7 @@ function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number) {
       if (L.night > 0.1 && (dx & 1) === 0 && (dy & 1) === 0) {
         // the light show cycles between a colour sweep, rings and sparkle
         const show = Math.floor(t / 12) % 3;
-        const led = show === 0 ? hsv((dx * 14 + dy * 9 + t * 50) % 360, 0.55, 1)
+        const led = S.christmas ? xmasLed(show, dx, dy, t) : show === 0 ? hsv((dx * 14 + dy * 9 + t * 50) % 360, 0.55, 1)
           : show === 1 ? hsv((Math.hypot(dx, dy) * 30 - t * 90 + 3600) % 360, 0.6, 1)
           : hash(dx, dy, Math.floor(t * 5)) < 0.45 ? WHITE : hsv(220, 0.7, 0.6);
         c = mix(c, led, L.night);
@@ -860,30 +966,38 @@ function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number) {
   }
   for (let i = 0; i < 9; i++) drawTree(p, L, S, ox + 5 + i * 14 + Math.floor(hash(i, 1, 360) * 6), 93, 3 + (i % 2), 360 + i);
 
-  // Margaret Hunt Hill Bridge
-  const bcx = ox + 164, span = 26;
-  const archY = (x: number) => 91 - 30 * (1 - ((x - bcx) / span) ** 2);
-  const archC: RGB = L.night > 0.2 ? mix(lit([236, 236, 230]), [245, 248, 255], L.night) : lit([236, 236, 230]);
-  if (L.night > 0.2) p.glow(bcx, 66, 16, [150, 190, 255], 0.14 * L.night);
-  for (let k = -12; k <= 12; k++) {
-    const ax = bcx + k * 2;
-    p.line(ax, archY(ax) + 1, bcx + k * 3.3, 91, lit([200, 200, 200]), 0.45);
+  // Margaret Hunt Hill Bridge: a single white arch standing on the deck, its stay cables
+  // crossing in a diamond lattice between the arch and the deck. Approach spans sit on piers.
+  const deckY = 89, deck0 = ox + 116, bcx = ox + 158, half = 27, rise = 24;
+  const archY = (x: number) => deckY - rise * (1 - ((x - bcx) / half) ** 2);
+  const white: RGB = [238, 238, 232];
+  const archC: RGB = L.night > 0.2 ? mix(lit(white), [245, 248, 255], L.night) : lit(white);
+  if (L.night > 0.2) p.glow(bcx, deckY - rise / 2, 18, [150, 190, 255], 0.14 * L.night);
+  const cableC: RGB = L.night > 0.2 ? mix(lit([210, 212, 216]), [200, 214, 255], L.night * 0.7) : lit([210, 212, 216]);
+  for (let ax = bcx - half + 5; ax <= bcx + half - 5; ax += 3) {
+    for (const s of [-1, 1]) {
+      const dx = Math.max(bcx - half + 2, Math.min(bcx + half - 2, ax + s * 7));
+      p.line(ax, archY(ax) + 2, dx, deckY - 1, cableC, 0.4);
+    }
   }
-  for (let x = bcx - span; x <= bcx + span; x++) {
-    p.set(x, archY(x), archC);
-    p.set(x, archY(x) + 1, x < bcx ? archC : scale(archC, 0.84));
-    if (Math.abs(x - bcx) > 20) p.set(x, archY(x) + 2, scale(archC, 0.8));
+  for (let x = bcx - half; x <= bcx + half; x++) {
+    const u = Math.abs(x - bcx) / half;
+    const y0 = Math.round(archY(x));
+    // fill down to the neighbouring column so the steep ends stay solid
+    const y1 = Math.max(y0 + (u > 0.75 ? 2 : 1), Math.round(archY(x + (x < bcx ? 1 : -1))) - 1);
+    for (let y = y0; y <= Math.min(y1, deckY - 1); y++) p.set(x, y, y === y0 || x < bcx ? archC : scale(archC, 0.84));
   }
-  p.rect(ox + 126, 91, 66, 1, lit([232, 232, 226]));
-  p.rect(ox + 126, 92, 66, 1, lit([196, 196, 190]));
-  p.rect(ox + 126, 93, 66, 1, lit([120, 120, 116]));
-  for (let x = ox + 132; x < W; x += 16) p.rect(x, 93, 2, 2, lit([150, 150, 146])); // piers
+  p.rect(deck0, deckY, W - deck0, 1, lit([236, 236, 230])); // railing
+  p.rect(deck0, deckY + 1, W - deck0, 1, lit([200, 200, 194])); // deck edge
+  p.rect(deck0, deckY + 2, W - deck0, 1, lit([128, 128, 124])); // underside shadow
+  p.rect(deck0 - 2, deckY, 3, 93 - deckY, lit([172, 168, 158])); // abutment
+  for (let x = deck0 + 12; x < W; x += 14) p.rect(x, deckY + 3, 2, 93 - deckY - 3, lit([150, 150, 146])); // piers
 
   // Grass, highway with traffic, and the Trinity River
   const grass = (x: number, y: number): RGB =>
     S.snowing ? (hash(x, y, 320) < 0.3 ? [150, 160, 120] : [236, 240, 248])
       : scale(S.grass, (x + y) % 7 === 0 ? 1.15 : hash(x, y, 321) < 0.2 ? 0.9 : 1);
-  for (let x = ox; x < W; x++) for (let y = 93; y < 95; y++) if (x < ox + 126) p.set(x, y, lit(grass(x, y)));
+  for (let x = ox; x < W; x++) for (let y = 93; y < 95; y++) p.set(x, y, lit(grass(x, y)));
   for (let y = 95; y < 99; y++) for (let x = ox; x < W; x++) p.set(x, y, lit(tex([62, 62, 68], x, y, 0.1)));
   p.rect(ox, 95, HALF, 1, lit([92, 92, 96])); // kerb
   for (let x = ox; x < W; x += 6) p.rect(x, 97, 3, 1, lit([200, 190, 120]));
@@ -898,6 +1012,11 @@ function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number) {
       p.glow(x + 1, 91, 6, [255, 190, 110], 0.35 * L.night);
       p.glow(x + 1, 97, 6, [255, 190, 110], 0.16 * L.night);
     }
+  }
+
+  if (S.christmas) {
+    for (let x = ox + 10; x + 26 < ox + 116; x += 26) fairyLights(p, L, x, 90, x + 26, 90, 2, x);
+    xmasTree(p, L, S, ox + 100, 95, 11, 2);
   }
 
   // The river carries a smeared reflection of the skyline
@@ -924,13 +1043,15 @@ function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number) {
 
   // Traffic, with headlight beams and tail-light streaks after dark
   const paints = [[220, 60, 60], [240, 240, 240], [60, 100, 200], [30, 30, 36], [200, 180, 60], [70, 150, 110]] as RGB[];
+  // Every car in a lane moves at the lane's speed from its own evenly spaced slot, so they never overlap.
+  const CARS = 7, span2 = HALF + 14, gap = span2 / CARS;
   for (let lane = 0; lane < 2; lane++) {
-    for (let i = 0; i < 7; i++) {
-      const dir = lane ? -1 : 1;
-      const speed = dir * (9 + hash(i, lane, 93) * 5);
-      const span2 = HALF + 14;
-      const off = (hash(i, lane, 91) * span2 + t * speed) % span2;
-      const x = Math.round(ox - 7 + (off < 0 ? off + span2 : off));
+    const dir = lane ? -1 : 1;
+    const speed = dir * (lane ? 12 : 10);
+    for (let i = 0; i < CARS; i++) {
+      const slot = (i + (hash(i, lane, 91) - 0.5) * 0.4) * gap;
+      const off = (((slot + t * speed) % span2) + span2) % span2;
+      const x = Math.round(ox - 7 + off);
       const y = lane ? 97 : 95;
       const truck = hash(i, lane, 94) < 0.2, len = truck ? 7 : 5;
       const body = paints[Math.floor(hash(i, lane, 92) * paints.length)];
@@ -962,7 +1083,9 @@ function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number) {
     p.line(x, H - 1, x + lean, H - 1 - h, c);
   }
 
+  if (S.christmas) drawSanta(p, L);
   drawWeather(p, ox, 92, S, L);
+  return L.top;
 }
 
 // ---------------------------------------------------------------- frame
@@ -970,11 +1093,11 @@ function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number) {
 const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
 const MINI_HEART = ['X.X', 'XXX', '.X.'];
 
+/** Draws both cities and returns the sky colour at the top edge of each half. */
 export function render(
   p: Pixels, cambridge: SkyState, dallas: SkyState, cSeason: Season, dSeason: Season, t: number,
-) {
-  drawCambridge(p, cambridge, cSeason, t);
-  drawDallas(p, dallas, dSeason, t);
+): [RGB, RGB] {
+  const tops: [RGB, RGB] = [drawCambridge(p, cambridge, cSeason, t), drawDallas(p, dallas, dSeason, t)];
 
   p.clipX0 = 0;
   p.clipX1 = W;
@@ -992,4 +1115,5 @@ export function render(
   p.sprite(HALF - 4, 3, HEART, { X: [40, 10, 24] });
   p.sprite(HALF - 3, 2, HEART, { X: mix([240, 70, 110], [255, 150, 180], beat) });
   p.set(HALF - 2, 3, [255, 220, 230]);
+  return tops;
 }

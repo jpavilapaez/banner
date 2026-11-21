@@ -18,6 +18,8 @@ export interface Season {
   fireflies: boolean;
   /** Bonfire Night in Cambridge, the Fourth of July in Dallas, New Year in both. */
   fireworks: boolean;
+  /** Decorations, lights and Santa from 1 December to New Year's Day. */
+  christmas: boolean;
   /** Misty mornings are thicker in the cold half of the year. */
   mist: number;
 }
@@ -84,6 +86,7 @@ export function seasonFor(date: Date, city: City, timeZone: string, override?: s
     bluebonnets: city === 'dallas' && doy >= 75 && doy < 130,
     fireflies: city === 'dallas' && doy >= 140 && doy < 240,
     fireworks: on(12, 31) || on(1, 1) || (city === 'cambridge' ? on(11, 5) : on(7, 4)),
+    christmas: !override && (month === 12 || (month === 1 && day === 1)),
     mist: doy < 90 || doy > 270 ? 1 : 0.55,
   };
 }

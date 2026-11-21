@@ -10,6 +10,7 @@ URL options:
 - `?me=Juan&her=Julie`: names on the clocks (these are the defaults)
 - `?season=winter|spring|summer|autumn`: force a season (otherwise it follows each city's date)
 - `?fireworks=1`: preview the fireworks (they run by themselves on New Year, on 5 November in Cambridge and on 4 July in Dallas)
+- `?christmas=1`: preview the Christmas decorations (they're up by themselves from 1 December to 1 January)
 - `?h12=1`: 12-hour clock on the Cambridge side; `?h24=1`: 24-hour on the Plano side
 - `?at=2026-11-15T22:00:00Z`: freeze time (for previewing night or day)
 
