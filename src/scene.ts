@@ -324,43 +324,13 @@ function fairyLights(p: Pixels, L: Light, x0: number, y0: number, x1: number, y1
   }
 }
 
-/** A decorated fir: three tiers, baubles by day, twinkling lights at night, and a star on top. */
-function xmasTree(p: Pixels, L: Light, S: Season, cx: number, base: number, h: number, seed: number) {
-  const lit = (c: RGB) => mul(c, L.amb);
-  p.rect(cx - (h > 12 ? 1 : 0), base - 2, h > 12 ? 2 : 1, 2, lit([86, 60, 40]));
-  const top = base - 2 - h, tier = h / 3;
-  const width = (j: number) => Math.round(0.5 + Math.floor(j / tier) * 1.4 + (j % tier) * 0.9);
-  for (let j = 0; j < h; j++)
-    for (let dx = -width(j); dx <= width(j); dx++) {
-      const x = cx + dx, y = top + j;
-      let c = scale([40, 108, 62], (dx < 0 ? 1.1 : 0.82) * (hash(x, y, seed) < 0.2 ? 0.85 : 1));
-      if (S.snowing && j % tier < 1 && hash(x, y, seed + 1) < 0.7) c = [236, 240, 248];
-      p.set(x, y, lit(c));
-    }
-  for (let i = 0; i < h * 1.4; i++) {
-    const j = 2 + Math.floor(hash(i, seed, 1) * (h - 2)), w = width(j);
-    const x = cx + Math.round((hash(i, seed, 2) * 2 - 1) * (w - 0.5)), y = top + j;
-    const c = BULBS[i % BULBS.length];
-    if (L.night > 0.1) {
-      const tw = 0.5 + 0.5 * Math.sin(L.t * 2.2 + i * 2.1);
-      p.set(x, y, mix(lit(c), c, L.night * (0.4 + 0.6 * tw)));
-      p.glow(x, y, 2, c, 0.25 * L.night * tw);
-    } else p.set(x, y, lit(c));
-  }
-  const star: RGB = [255, 222, 90];
-  const sc = L.night > 0.1 ? star : lit(star);
-  p.set(cx, top - 1, sc); p.set(cx - 1, top - 1, sc); p.set(cx + 1, top - 1, sc); p.set(cx, top - 2, sc);
-  if (L.night > 0.1) p.glow(cx, top - 1, 6, [255, 210, 120], (0.3 + 0.15 * Math.sin(L.t * 2)) * L.night);
-}
-
-/** Santa and three reindeer cross the whole banner now and then after dark. */
+/** Santa and three reindeer cross the whole banner every forty seconds, day or night. */
 function drawSanta(p: Pixels, L: Light) {
-  if (L.night < 0.3) return;
-  const period = 70, ph = (L.t % period) / 26;
+  const period = 40, ph = (L.t % period) / 26;
   if (ph >= 1) return;
   const sx = Math.round(-50 + ph * (W + 90)), sy = Math.round(30 + Math.sin(ph * 9) * 4);
-  // moonlit, so lighter than a silhouette
-  const k = (c: RGB): RGB => mix(mul(c, L.amb), c, 0.55);
+  // after dark they're moonlit, so lighter than a silhouette
+  const k = (c: RGB): RGB => mix(mul(c, L.amb), c, 0.55 * L.night);
   for (let i = 1; i < 14; i++) p.blend(sx - i, sy + 2 + Math.round(Math.sin(i * 0.8 + L.t * 3)), [255, 230, 150], 0.5 * (1 - i / 14) * (Math.sin(i * 2.7 + L.t * 9) > 0 ? 1 : 0.3)); // sparkle trail
   const red = k([200, 30, 36]), gold = k([230, 190, 80]), brown = k([120, 80, 50]);
   p.rect(sx, sy - 2, 7, 3, red); // sleigh
@@ -382,7 +352,7 @@ function drawSanta(p: Pixels, L: Light) {
     p.set(rx + 4, ry - 1, brown); p.set(rx + 5, ry - 1, brown); // head
     p.set(rx + 4, ry - 2, k([180, 150, 110])); p.set(rx + 3, ry - 3, k([180, 150, 110])); p.set(rx + 5, ry - 3, k([180, 150, 110])); // antlers
     p.set(rx + gallop, ry + 2, brown); p.set(rx + 3 - gallop, ry + 2, brown); // legs
-    if (i === 2) { p.set(rx + 6, ry - 1, [255, 60, 50]); p.glow(rx + 6, ry - 1, 3, [255, 40, 40], 0.6); } // Rudolph
+    if (i === 2) { p.set(rx + 6, ry - 1, [255, 60, 50]); p.glow(rx + 6, ry - 1, 3, [255, 40, 40], 0.2 + 0.4 * L.night); } // Rudolph
   }
 }
 
@@ -610,8 +580,6 @@ function drawCambridge(p: Pixels, sky: SkyState, S: Season, t: number): RGB {
         const r = hash(x, y, 310);
         if (r < 0.1) p.set(x, y, lit(r < 0.05 ? [170, 110, 220] : r < 0.08 ? [250, 250, 240] : [250, 210, 70]));
       }
-
-  if (S.christmas) xmasTree(p, L, S, 116, 86, 15, 1);
 
   // Cattle grazing on the Backs (they stay in when it snows)
   if (!S.snowing)
@@ -1016,7 +984,6 @@ function drawDallas(p: Pixels, sky: SkyState, S: Season, t: number): RGB {
 
   if (S.christmas) {
     for (let x = ox + 10; x + 26 < ox + 116; x += 26) fairyLights(p, L, x, 90, x + 26, 90, 2, x);
-    xmasTree(p, L, S, ox + 100, 95, 11, 2);
   }
 
   // The river carries a smeared reflection of the skyline
